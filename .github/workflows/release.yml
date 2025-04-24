@@ -1,0 +1,52 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+          override: true
+
+      - name: 安装 protobuf-compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: 缓存 cargo 依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: 编译 Release 版本
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: 打包二进制和资源文件
+        run: |
+          mkdir dist
+          cp target/x86_64-unknown-linux-gnu/release/${{ github.event.repository.name }} dist/
+          cp -r proto dist/ || true
+          cp README.md LICENSE dist/ || true
+          cd dist
+          tar -czvf ${{ github.event.repository.name }}-linux-amd64.tar.gz ${{ github.event.repository.name }} proto README.md LICENSE || tar -czvf ${{ github.event.repository.name }}-linux-amd64.tar.gz ${{ github.event.repository.name }}
+
+      - name: 上传 Release 产物
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ github.event.repository.name }}-linux-amd64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
